@@ -1,0 +1,175 @@
+Okay, I will generate a sequence diagram in PlantUML format based on the provided code, focusing on the key interactions within the blog application.
+
+```plantuml
+@startuml
+actor User
+participant "Express Server" as Server
+participant "Auth Routes" as AuthRoutes
+participant "Auth Controller" as AuthController
+participant "Blog Routes" as BlogRoutes
+participant "Blog Controller" as BlogController
+participant "User Model" as UserModel
+participant "Blog Model" as BlogModel
+database "MongoDB" as DB
+participant "JWT" as JWT
+participant "Bcrypt" as Bcrypt
+'----------------------- User Registration -----------------------
+User -> Server: POST /auth/register {username, password}
+Server -> AuthRoutes: Route to register
+AuthRoutes -> AuthController: register(req, res)
+AuthController -> Bcrypt: hash(password, salt)
+activate Bcrypt
+Bcrypt --> AuthController: hashedPassword
+deactivate Bcrypt
+AuthController -> UserModel: new User({username, hashedPassword})
+activate UserModel
+UserModel -> DB: save()
+activate DB
+DB --> UserModel: success/failure
+deactivate DB
+UserModel --> AuthController: user
+deactivate UserModel
+AuthController --> AuthRoutes: res.status(201).send("User created") / res.status(500).send(err.message)
+AuthRoutes --> Server: Response
+Server --> User: HTTP Response (201 or 500)
+
+'----------------------- User Login -----------------------
+User -> Server: POST /auth/login {username, password}
+Server -> AuthRoutes: Route to login
+AuthRoutes -> AuthController: login(req, res)
+AuthController -> UserModel: User.findOne({username})
+activate UserModel
+UserModel -> DB: findOne({username})
+activate DB
+DB --> UserModel: user or null
+deactivate DB
+UserModel --> AuthController: user or null
+deactivate UserModel
+alt User found
+AuthController -> Bcrypt: compare(password, user.password)
+activate Bcrypt
+Bcrypt --> AuthController: true/false
+deactivate Bcrypt
+alt Password matches
+AuthController -> JWT: generateToken({userId, username})
+activate JWT
+JWT --> AuthController: accessToken
+deactivate JWT
+AuthController --> AuthRoutes: res.json({accessToken})
+else Password does not match
+AuthController --> AuthRoutes: res.send("Not Allowed")
+end
+else User not found
+AuthController --> AuthRoutes: res.status(400).send('Cannot find user')
+end
+AuthRoutes --> Server: Response
+Server --> User: HTTP Response (200 or 400 or 403)
+
+'----------------------- Get All Blogs -----------------------
+User -> Server: GET /blogs
+Server -> BlogRoutes: Route to getAllBlogs
+BlogRoutes -> BlogController: getAllBlogs(req, res)
+BlogController -> BlogModel: Blog.find().populate('author', 'username')
+activate BlogModel
+BlogModel -> DB: find().populate('author', 'username')
+activate DB
+DB --> BlogModel: blogs[]
+deactivate DB
+BlogModel --> BlogController: blogs[]
+deactivate BlogModel
+BlogController --> BlogRoutes: res.json(blogs)
+BlogRoutes --> Server: Response
+Server --> User: HTTP Response (200)
+
+'----------------------- Create Blog -----------------------
+User -> Server: POST /blogs {title, content}, Authorization: Bearer <token>
+Server -> BlogRoutes: Route to createBlog, authenticateToken
+BlogRoutes -> JWT: verifyToken(token)
+activate JWT
+JWT --> BlogRoutes: decoded payload {userId, username}
+deactivate JWT
+BlogRoutes -> BlogController: createBlog(req, res)
+BlogController -> BlogModel: new Blog({title, content, author: userId})
+activate BlogModel
+BlogModel -> DB: save()
+activate DB
+DB --> BlogModel: success/failure
+deactivate DB
+BlogModel --> BlogController: blog
+deactivate BlogModel
+BlogController --> BlogRoutes: res.status(201).send("Blog created") / res.status(500).send(err.message)
+BlogRoutes --> Server: Response
+Server --> User: HTTP Response (201 or 500)
+
+'----------------------- Update Blog -----------------------
+User -> Server: PUT /blogs/:id {title, content}, Authorization: Bearer <token>
+Server -> BlogRoutes: Route to updateBlog, authenticateToken
+BlogRoutes -> JWT: verifyToken(token)
+activate JWT
+JWT --> BlogRoutes: decoded payload {userId, username}
+deactivate JWT
+BlogRoutes -> BlogController: updateBlog(req, res)
+BlogController -> BlogModel: Blog.findById(req.params.id)
+activate BlogModel
+BlogModel -> DB: findById(req.params.id)
+activate DB
+DB --> BlogModel: blog or null
+deactivate DB
+BlogModel --> BlogController: blog or null
+deactivate BlogModel
+
+alt Blog found AND User is author
+BlogController -> BlogModel: blog.save()
+activate BlogModel
+BlogModel -> DB: save()
+activate DB
+DB --> BlogModel: success/failure
+deactivate DB
+BlogModel --> BlogController: blog
+deactivate BlogModel
+BlogController --> BlogRoutes: res.send("Blog updated")
+else Blog not found
+BlogController --> BlogRoutes: res.status(404).send('Blog not found')
+else User is not author
+BlogController --> BlogRoutes: res.sendStatus(403)
+end
+BlogRoutes --> Server: Response
+Server --> User: HTTP Response (200, 404, or 403)
+
+'----------------------- Delete Blog -----------------------
+User -> Server: DELETE /blogs/:id, Authorization: Bearer <token>
+Server -> BlogRoutes: Route to deleteBlog, authenticateToken
+BlogRoutes -> JWT: verifyToken(token)
+activate JWT
+JWT --> BlogRoutes: decoded payload {userId, username}
+deactivate JWT
+BlogRoutes -> BlogController: deleteBlog(req, res)
+BlogController -> BlogModel: Blog.findById(req.params.id)
+activate BlogModel
+BlogModel -> DB: findById(req.params.id)
+activate DB
+DB --> BlogModel: blog or null
+deactivate DB
+BlogModel --> BlogController: blog or null
+deactivate BlogModel
+
+alt Blog found AND User is author
+BlogController -> BlogModel: Blog.findByIdAndDelete(req.params.id)
+activate BlogModel
+BlogModel -> DB: findByIdAndDelete(req.params.id)
+activate DB
+DB --> BlogModel: success/failure
+deactivate DB
+BlogModel --> BlogController:
+deactivate BlogModel
+BlogController --> BlogRoutes: res.send("Blog deleted")
+else Blog not found
+BlogController --> BlogRoutes: res.status(404).send('Blog not found')
+else User is not author
+BlogController --> BlogRoutes: res.sendStatus(403)
+end
+BlogRoutes --> Server: Response
+Server --> User: HTTP Response (200, 404, or 403)
+
+@enduml
+```
