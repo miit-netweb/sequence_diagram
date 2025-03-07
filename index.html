@@ -1,173 +1,483 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
+  <head>
+    <meta charset="UTF-8" />
     <title>Code to generate Sequence Diagram</title>
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 20px;
-            background: linear-gradient(to right, #1e3c72, #2a5298);
-            color: white;
-            text-align: center;
-        }
+      body {
+        font-family: "Poppins", sans-serif;
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 20px;
+        background: rgb(255, 255, 255);
+        color: black;
+        text-align: center;
+      }
 
-        #dropArea {
-            border: 3px dashed #fff;
-            border-radius: 12px;
-            padding: 50px;
-            text-align: center;
-            color: #fff;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            background: rgba(255, 255, 255, 0.1);
-        }
+      #dropArea {
+        border: 3px dashed #7d7b7b;
+        margin: 3% 0%;
+        border-radius: 12px;
+        height: 320px;
+        padding: 50px;
+        text-align: center;
+        color: black;
+        cursor: pointer;
+        /* transition: all 0.3s ease; */
+        background: rgba(210, 207, 207, 0.61);
+      }
 
-        #dropArea.highlight {
-            border-color: #28a745;
-            background: rgba(40, 167, 69, 0.3);
-        }
+      #dropArea.highlight {
+        border-color: #28a745;
+        background: rgba(40, 167, 69, 0.3);
+      }
 
-        #fileInput {
-            display: none;
-        }
+      #fileInput {
+        display: none;
+      }
 
-        #loaderContainer {
-            display: none;
-            margin: 20px 0;
-        }
+      /* #loaderContainer {
+        display: none;
+        margin: 20px 0;
+      } */
+      #loaderContainer {
+        display: none; /* Initially hidden */
+        margin: 20px auto; /* Centers the container horizontally */
+        text-align: center; /* Centers the text inside */
+        position: relative; /* For positioning of the loader */
+        max-width: 500px; /* Optional: Limit the container width */
+        background-color: #edf5f5;
+      }
 
-        .loader {
-            border: 5px solid rgba(255, 255, 255, 0.3);
-            border-top: 5px solid #fff;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 10px auto;
-        }
+      #loaderContainer p {
+        font-size: 18px; /* Adjust text size if needed */
+        margin-bottom: 20px; /* Space between text and the loader */
+        color: rgb(0, 0, 0); /* Ensure the text is visible on the background */
+      }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+      dotlottie-player {
+        width: 400px; /* Adjust the size of the loader */
+        height: 400px; /* Adjust the size of the loader */
+        margin-top: 20px; /* Space between text and loader */
+        display: block; /* Centering it as a block element */
+        margin-left: auto;
+        margin-right: auto;
+      }
 
-        .hidden {
-            display: none;
-        }
+      .loader {
+        border: 5px solid rgba(255, 255, 255, 0.3);
+        border-top: 5px solid #fff;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 10px auto;
+      }
 
-        .button-container {
-            margin-top: 20px;
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
         }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
 
-        .action-button {
-            padding: 12px 24px;
-            font-size: 16px;
-            font-weight: bold;
-            margin: 10px;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: 0.3s;
-        }
+      .hidden {
+        display: none;
+      }
 
-        #downloadBtn {
-            background: #ff9800;
-            color: white;
-        }
+      .button-container {
+        margin-top: 20px;
+      }
+      .action-button {
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: bold;
+        margin: 10px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        color: #333;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
 
-        #downloadBtn:hover {
-            background: #e68900;
-        }
+      #downloadBtn {
+        background: linear-gradient(145deg, #ff9800, #ff6f00);
+        color: white;
+      }
 
-        #homeBtn {
-            background: #4CAF50;
-            color: white;
-        }
+      #downloadBtn .fa-download {
+        margin-right: 8px;
+      }
 
-        #homeBtn:hover {
-            background: #45a049;
+      #downloadBtn:hover {
+        background: linear-gradient(145deg, #e68900, #e65100);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      #homeBtn {
+        background: linear-gradient(145deg, #4caf50, #388e3c);
+        color: white;
+      }
+
+      #homeBtn:hover {
+        background: linear-gradient(145deg, #45a049, #388e3c);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+      }
+
+      .button-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      /* Optional: Animation for hover effect */
+      .action-button:hover {
+        animation: hoverAnimation 0.4s forwards;
+      }
+
+      @keyframes hoverAnimation {
+        0% {
+          transform: translateY(0);
         }
+        50% {
+          transform: translateY(-5px);
+        }
+        100% {
+          transform: translateY(0);
+        }
+      }
+      /* 
+      .action-button {
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: bold;
+        margin: 10px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: 0.3s;
+      }
+
+      #downloadBtn {
+        background: #ff9800;
+        color: white;
+      }
+
+      #downloadBtn:hover {
+        background: #e68900;
+      }
+
+      #homeBtn {
+        background: #4caf50;
+        color: white;
+      }
+
+      #homeBtn:hover {
+        background: #45a049;
+      } */
+      #errorMessage {
+        color: #585858;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+        margin-top: 30px;
+        font-size: 20px;
+        font-weight: bold;
+        width: 100%;
+        max-width: 400px;
+        margin: 20px auto;
+        position: relative;
+      }
+
+      #errorMessage a {
+        color: #585858; /* Softer yellow color */
+        text-decoration: underline;
+        cursor: pointer;
+      }
+
+      #errorMessage a:hover {
+        color: #343330;
+      }
+
+      #dotlottieErrorAnimation {
+        margin: 15px auto;
+        display: block;
+        width: 250px; /* Resize for better fit */
+        height: 250px; /* Resize for better fit */
+      }
+
+      h1 {
+        margin: 3% auto;
+        font-size: 1.5rem;
+        white-space: nowrap;
+        overflow: hidden;
+        /* animation: typewriter 2s steps(13) infinite alternate,
+          blink 800ms steps(13) infinite normal; */
+      }
+
+      .button-62 {
+        background: linear-gradient(to bottom right, #ef4765, #ff9a5a);
+        border: 0;
+        border-radius: 12px;
+        color: #ffffff;
+        cursor: pointer;
+        display: inline-block;
+        font-family: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        font-size: 16px;
+        font-weight: 500;
+        line-height: 2.5;
+        outline: transparent;
+        padding: 0 1rem;
+        text-align: center;
+        text-decoration: none;
+        transition: box-shadow 0.2s ease-in-out;
+        user-select: none;
+        -webkit-user-select: none;
+        touch-action: manipulation;
+        white-space: nowrap;
+      }
+
+      .button-62:not([disabled]):focus {
+        box-shadow: 0 0 0.25rem rgba(0, 0, 0, 0.5),
+          -0.125rem -0.125rem 1rem rgba(239, 71, 101, 0.5),
+          0.125rem 0.125rem 1rem rgba(255, 154, 90, 0.5);
+      }
+
+      .button-62:not([disabled]):hover {
+        box-shadow: 0 0 0.25rem rgba(0, 0, 0, 0.5),
+          -0.125rem -0.125rem 1rem rgba(239, 71, 101, 0.5),
+          0.125rem 0.125rem 1rem rgba(255, 154, 90, 0.5);
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body id="body">
     <h1 id="mainTitle">Upload Your Code & Get a Sequence Diagram!</h1>
-    
-    <div id="dropArea">
-        <p>Upload Your Code Here</p>
-        <button onclick="document.getElementById('fileInput').click()">Select Folder</button>
+
+    <div
+      style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 1% 0;
+        flex-wrap: wrap;
+      "
+    >
+      <div style="padding: 1% 5%; margin-right: 2%" id="lottie">
+        <script
+          src="https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs"
+          type="module"
+        ></script>
+        <dotlottie-player
+          src="https://lottie.host/c04f761b-72aa-4074-aec1-0d72d62e37e3/yvSPh4lz02.lottie"
+          background="transparent"
+          speed="1"
+          style="width: 400px; height: 400px"
+          loop
+          autoplay
+        ></dotlottie-player>
+      </div>
+
+      <div
+        id="dropArea"
+        style="
+          padding: 1% 7%;
+          width: 20%;
+          display: flex;
+          justify-content: center;
+          flex-wrap: wrap;
+        "
+      >
+        <div style="margin-top: 40%">
+          <p style="font-weight: bolder; font-size: larger">
+            Upload Your Code Here
+          </p>
+          <!-- <button style="width: 100px">Select Folder</button> -->
+          <button
+            class="button-62"
+            onclick="document.getElementById('fileInput').click()"
+            role="button"
+          >
+            <svg
+              fill="#ffffff"
+              version="1.1"
+              id="Capa_1"
+              xmlns="http://www.w3.org/2000/svg"
+              xmlns:xlink="http://www.w3.org/1999/xlink"
+              width="10px"
+              height="10px"
+              viewBox="0 0 45.402 45.402"
+              xml:space="preserve"
+              stroke="#ffffff"
+            >
+              <g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+              <g
+                id="SVGRepo_tracerCarrier"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ></g>
+              <g id="SVGRepo_iconCarrier">
+                <g>
+                  <path
+                    d="M41.267,18.557H26.832V4.134C26.832,1.851,24.99,0,22.707,0c-2.283,0-4.124,1.851-4.124,4.135v14.432H4.141 c-2.283,0-4.139,1.851-4.138,4.135c-0.001,1.141,0.46,2.187,1.207,2.934c0.748,0.749,1.78,1.222,2.92,1.222h14.453V41.27 c0,1.142,0.453,2.176,1.201,2.922c0.748,0.748,1.777,1.211,2.919,1.211c2.282,0,4.129-1.851,4.129-4.133V26.857h14.435 c2.283,0,4.134-1.867,4.133-4.15C45.399,20.425,43.548,18.557,41.267,18.557z"
+                  ></path>
+                </g>
+              </g>
+            </svg>
+            Upload
+          </button>
+        </div>
+      </div>
     </div>
 
-    <input 
-        type="file"
-        id="fileInput"
-        webkitdirectory
-        multiple
-        class="hidden"
-    >
+    <input type="file" id="fileInput" webkitdirectory multiple class="hidden" />
 
+    <!-- <div id="loaderContainer">
+      <p>Generating your sequence diagram, please wait...</p>
+      <div class="loader"></div>
+      <script
+        src="https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs"
+        type="module"
+      ></script>
+      <dotlottie-player
+        src="https://lottie.host/ea23feaa-3ac8-431c-aa2b-7199904e916c/mBzZO4TbAA.lottie"
+        speed="1"
+        style="width: 300px; height: 300px"
+        loop
+        autoplay
+      ></dotlottie-player>
+    </div> -->
     <div id="loaderContainer">
-        <p>Generating your sequence diagram, please wait...</p>
-        <div class="loader"></div>
+      <p>Generating your sequence diagram, please wait...</p>
+      <script
+        src="https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs"
+        type="module"
+      ></script>
+      <dotlottie-player
+        src="https://lottie.host/ea23feaa-3ac8-431c-aa2b-7199904e916c/mBzZO4TbAA.lottie"
+        speed="1"
+        style="width: 400px; height: 400px; margin-top: 20px"
+        loop
+        autoplay
+      ></dotlottie-player>
     </div>
 
     <div id="imageContainer" class="hidden">
-        <img id="outputImage" src="" alt="Generated Sequence Diagram" style="max-width: 100%; border: 3px solid white; border-radius: 10px; margin-top: 20px;">
-        <div class="button-container">
-            <button id="downloadBtn" class="action-button">Download Sequence Diagram</button>
-            <button id="homeBtn" class="action-button" onclick="location.reload();">Upload Other Folder</button>
-        </div>
+      <img
+        id="outputImage"
+        src=""
+        alt="Generated Sequence Diagram"
+        style="
+          max-width: 100%;
+          border: 3px solid white;
+          border-radius: 10px;
+          margin-top: 20px;
+        "
+      />
+      <div class="button-container">
+        <button id="downloadBtn" class="action-button btn-shine">
+          <i class="fas fa-download"></i> Download Sequence Diagram
+        </button>
+        <button id="homeBtn" class="action-button" onclick="location.reload();">
+          Upload Other Folder
+        </button>
+      </div>
     </div>
 
+    <div id="errorMessage" class="hidden">
+      <dotlottie-player
+        id="dotlottieErrorAnimation"
+        src="https://lottie.host/6f5521d4-4e20-4c28-9018-ec279cd8aa6c/bMjXCTkfQ0.lottie"
+        background="transparent"
+        speed="1"
+        loop
+        autoplay
+      >
+      </dotlottie-player>
+      <p>
+        Oops! Something went wrong. <br /><a
+          href="#"
+          onclick="location.reload();"
+          >Click here to try again</a
+        >
+      </p>
+    </div>
+
+    <script
+      src="https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs"
+      type="module"
+    ></script>
+
     <script>
-        const fileInput = document.getElementById('fileInput');
-        const dropArea = document.getElementById('dropArea');
-        const loaderContainer = document.getElementById('loaderContainer');
-        const mainTitle = document.getElementById('mainTitle');
-        const imageContainer = document.getElementById('imageContainer');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const outputImage = document.getElementById('outputImage');
-        
-        fileInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
-            uploadFiles(files);
-        });
-        
-        function uploadFiles(files) {
-            if (files.length === 0) return;
-            
-            dropArea.style.display = 'none';
-            mainTitle.style.display = 'none';
-            loaderContainer.style.display = 'block';
-            
-            const formData = new FormData();
-            files.forEach(file => formData.append('files', file));
-            
-            fetch('http:localhost:5006/preparepriorities', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.blob())
-            .then(data => {
-                let objectURL = URL.createObjectURL(data);
-                outputImage.src = objectURL;
-                imageContainer.classList.remove('hidden');
-                downloadBtn.onclick = function() {
-                    const link = document.createElement('a');
-                    link.href = objectURL;
-                    link.download = 'sequence_diagram.png';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                };
-            })
-            .catch(error => console.error('Error:', error))
-            .finally(() => {
-                loaderContainer.style.display = 'none';
-            });
-        }
+      const fileInput = document.getElementById("fileInput");
+      const dropArea = document.getElementById("dropArea");
+      const loaderContainer = document.getElementById("loaderContainer");
+      const mainTitle = document.getElementById("mainTitle");
+      const imageContainer = document.getElementById("imageContainer");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const outputImage = document.getElementById("outputImage");
+      const errorMessage = document.getElementById("errorMessage");
+      const lottie = document.getElementById("lottie");
+      const body = document.getElementById("body");
+
+      window.onload = function () {
+        errorMessage.classList.add("hidden");
+      };
+
+      fileInput.addEventListener("change", (e) => {
+        const files = Array.from(e.target.files);
+        uploadFiles(files);
+      });
+
+      function uploadFiles(files) {
+        if (files.length === 0) return;
+
+        dropArea.style.display = "none";
+        mainTitle.style.display = "none";
+        lottie.style.display = "none";
+        body.style.backgroundColor = "#edf5f5";
+        loaderContainer.style.display = "block";
+
+        const formData = new FormData();
+        files.forEach((file) => formData.append("files", file));
+
+        fetch("http:localhost:5006/preparepriorities", {
+          method: "POST",
+          body: formData,
+        })
+          .then((response) => response.blob())
+          .then((data) => {
+            let objectURL = URL.createObjectURL(data);
+            outputImage.src = objectURL;
+            imageContainer.classList.remove("hidden");
+            downloadBtn.onclick = function () {
+              const link = document.createElement("a");
+              link.href = objectURL;
+              link.download = "sequence_diagram.png";
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            };
+          })
+          .catch((error) => {
+            errorMessage.classList.remove("hidden");
+
+            console.error("Error:", error);
+          })
+          .finally(() => {
+            body.style.backgroundColor = "white";
+            loaderContainer.style.display = "none";
+          });
+      }
     </script>
-</body>
+  </body>
 </html>

@@ -1,5 +1,6 @@
 ```plantuml
 @startuml
+'Participants
 participant V2EnrollmentController
 participant AuthService
 participant JwtServerProxy
@@ -14,36 +15,27 @@ participant EmailService
 participant EmailPendingRepository
 participant RabbitMQProducer
 
-autonumber
-
+'Sequence Flow
 V2EnrollmentController -> JwtServerProxy: validateToken(token)
 activate JwtServerProxy
 JwtServerProxy --> V2EnrollmentController: ResponseEntity<?> (partnerNumber)
 deactivate JwtServerProxy
 
-alt Token Validation Fails
-    V2EnrollmentController --> V2EnrollmentController: throw UnAuthorizedUserException
-else Token Validation Success & Partner Number Matches
+alt Valid Token & Partner Number
     V2EnrollmentController -> AuthService: ValidateResponse(subscriber)
     activate AuthService
-    alt Validation Fails
-        AuthService --> V2EnrollmentController: throw ValidationException
-    else Validation Success
-        V2EnrollmentController -> PartnerServiceProxy: validatePartner(PartnerServiceDto, partnerNumber)
+    alt Validation Success
+        V2EnrollmentController -> PartnerServiceProxy: validatePartner(partnerServiceDto, partnerNumber)
         activate PartnerServiceProxy
-        PartnerServiceProxy --> V2EnrollmentController: ResponseEntity<SubscriptionData>
+        PartnerServiceProxy --> V2EnrollmentController: ResponseEntity<SubscriptionData> (subscriptionData)
         deactivate PartnerServiceProxy
-        alt Partner Validation Fails
-            V2EnrollmentController --> V2EnrollmentController: throw ValidationException
-        else Partner Validation Success
-            V2EnrollmentController -> ThirdPartyEntityProxy: createCustomer(ThirdPartyEntityDto)
+        alt Subscription Data Valid
+            V2EnrollmentController -> ThirdPartyEntityProxy: createCustomer(thirdPartyEntityDto)
             activate ThirdPartyEntityProxy
             ThirdPartyEntityProxy --> V2EnrollmentController: ResponseEntity<Boolean> (success)
             deactivate ThirdPartyEntityProxy
-            alt Third Party Creation Fails
-                V2EnrollmentController --> V2EnrollmentController: throw ValidationException
-            else Third Party Creation Success
-                V2EnrollmentController -> AuthService: enrollNewSubscriber(subscriber, SUBSCRIBER_NUMBER)
+            alt Third Party Creation Success
+                V2EnrollmentController -> AuthService: enrollNewSubscriber(subscriberDto, subscriberNumber)
                 activate AuthService
                 AuthService -> PersonalDetailsRepository: save(personalDetails)
                 activate PersonalDetailsRepository
@@ -53,7 +45,7 @@ else Token Validation Success & Partner Number Matches
                 activate SubscriberRepository
                 SubscriberRepository --> AuthService: Subscriber
                 deactivate SubscriberRepository
-                AuthService --> V2EnrollmentController: Subscriber
+                deactivate AuthService
 
                 V2EnrollmentController -> BillingService: saveBillingPendingEntry(billingPending)
                 activate BillingService
@@ -61,10 +53,11 @@ else Token Validation Success & Partner Number Matches
                 activate BillingPendingRepository
                 BillingPendingRepository --> BillingService: BillingPending
                 deactivate BillingPendingRepository
-                BillingService --> V2EnrollmentController: BillingPending
                 deactivate BillingService
                 V2EnrollmentController -> BillingProducer: sendMessage(billingPending)
                 activate BillingProducer
+                BillingProducer --> V2EnrollmentController: void
+                deactivate BillingProducer
 
                 V2EnrollmentController -> EmailService: addPendingEntry(emailPending)
                 activate EmailService
@@ -72,43 +65,55 @@ else Token Validation Success & Partner Number Matches
                 activate EmailPendingRepository
                 EmailPendingRepository --> EmailService: EmailPending
                 deactivate EmailPendingRepository
-                EmailService --> V2EnrollmentController: EmailPending
                 deactivate EmailService
                 V2EnrollmentController -> RabbitMQProducer: sendMessage(emailPending)
                 activate RabbitMQProducer
-
+                RabbitMQProducer --> V2EnrollmentController: void
+                deactivate RabbitMQProducer
 
                 V2EnrollmentController --> V2EnrollmentController: ResponseEntity.ok("success")
-                deactivate RabbitMQProducer
-                deactivate BillingProducer
-                deactivate AuthService
+            else Third Party Creation Failure
+                V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (ErrorCodes.SUBSCRIBER_CREATION_FAILED)
             end
+        else Subscription Data Invalid
+             V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (ErrorCodes.INVALID_PARTNER)
         end
+    else Validation Failure
+        V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (ErrorCodes.USER_VALIDATION_FAILED)
     end
+else Invalid Token or Partner Number Mismatch
+    V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (UnAuthorizedUserException)
 end
-deactivate V2EnrollmentController
 
 @enduml
 ```
 
 **Explanation of the Diagram:**
 
-1.  **Components:** The diagram represents the core components involved in the enrollment process, including the controller, services, repositories, proxies to external services, and message producers.
-2.  **Flow Initiation:** The `V2EnrollmentController` receives a request to enroll a subscriber.
-3.  **Token Validation:** It first calls the `JwtServerProxy` to validate the provided token.
-4.  **Authorization Check:** After token validation, extract partnerNumber from token and compare with user's partnerNumber.
-5.  **Data Validation:**  If the token is valid and partner Number is matched, the `AuthService` validates the `SubscriberDto`.
-6.  **Partner Validation:** Then, it calls the `PartnerServiceProxy` to validate the partner and subscription details.
-7.  **Third-Party Integration:** Upon successful validation, the `ThirdPartyEntityProxy` is invoked to create a customer in an external system.
-8.  **Data Persistence:** If the third-party creation is successful, the `AuthService` saves the subscriber details in the `SubscriberRepository` and `PersonalDetailsRepository`.
-9.  **Asynchronous Tasks:** `BillingService`, `BillingProducer`, `EmailService`, and `RabbitMQProducer` are engaged in asynchronous operations for billing and email notifications.
-10. **Error Handling:** The `alt` and `else` blocks represent conditional flows based on validation results, third-party creation status, and potential exceptions.
-11. **Return Value:** The controller returns a success message if the enrollment process completes successfully.
+1.  **Components:** The diagram includes the key components of the Enrollment Service, such as the Controller (`V2EnrollmentController`), Services (`AuthService`, `BillingService`, `EmailService`), Repositories (`SubscriberRepository`, `PersonalDetailsRepository`, `BillingPendingRepository`, `EmailPendingRepository`), Kafka Producer (`BillingProducer`), RabbitMQ Producer (`RabbitMQProducer`), and Proxies for external services (`JwtServerProxy`, `PartnerServiceProxy`, `ThirdPartyEntityProxy`).
 
-**Key Flows:**
+2.  **Workflow:**
+    *   The `V2EnrollmentController` receives a new subscriber request (`addNewUser`).
+    *   It first validates the JWT token via `JwtServerProxy.validateToken()`.
+    *   If the token is valid and the partner number in the token matches the partner number in the request, it validates the subscriber data through the `AuthService.ValidateResponse()` method.
+    *   Upon successful validation, it communicates with `PartnerServiceProxy.validatePartner()` to validate partner details.
+    *   If partner validation is successful, it calls `ThirdPartyEntityProxy.createCustomer()` to create the customer in an external entity.
+    *   After successful third-party customer creation, the core enrollment logic in `AuthService.enrollNewSubscriber()` is executed, which saves the `PersonalDetails` and `Subscriber` entities to their respective repositories (`PersonalDetailsRepository`, `SubscriberRepository`).
+    *   Billing and Email services is called `BillingService.saveBillingPendingEntry()` and `RabbitMQProducer.sendMessage()` for message publishing respectively.
+    *   Finally, the controller returns a success or failure response.
 
-*   The diagram illustrates the sequence of operations performed during the enrollment process, including validation, external service calls, data persistence, and asynchronous tasks.
-*   It highlights the dependencies between components and the flow of data between them.
-*   The use of `alt` and `else` blocks clarifies the decision points and error-handling mechanisms in the system.
-*   The asynchronous nature of billing and email notification is indicated by the use of `CompletableFuture.runAsync`.
+3.  **Data Flow:**
+    *   The `SubscriberDto` contains subscriber data, which is passed between the controller and the `AuthService`.
+    *   `PartnerServiceDto` and `SubscriptionData` is passed to the `PartnerServiceProxy`.
+    *   The subscriber number is generated within the `AuthService`.
+    *   `ThirdPartyEntityDto` is passed to `ThirdPartyEntityProxy`.
+    *   `BillingPending` and `EmailPending` is passed to the respective services and queues.
+    *   `PersonalDetails` and `Subscriber` entities are saved to the database.
 
+4.  **Dependencies:** The diagram clearly shows the dependencies between the components, particularly the use of Proxies to interact with external services.
+
+5.  **Error Handling:** Alternative flows are included to represent potential error scenarios, such as failed validations, invalid partner details, and failures during third-party customer creation.
+
+6.  **Asynchronous Operations:** The asynchronous operations are saving billing details and sending an email.
+
+7.  **Rate Limiting:** Controller is protected by `RateLimiter`.
