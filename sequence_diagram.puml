@@ -1,175 +1,114 @@
-Okay, I will generate a sequence diagram in PlantUML format based on the provided code, focusing on the key interactions within the blog application.
-
 ```plantuml
 @startuml
-actor User
-participant "Express Server" as Server
-participant "Auth Routes" as AuthRoutes
-participant "Auth Controller" as AuthController
-participant "Blog Routes" as BlogRoutes
-participant "Blog Controller" as BlogController
-participant "User Model" as UserModel
-participant "Blog Model" as BlogModel
-database "MongoDB" as DB
-participant "JWT" as JWT
-participant "Bcrypt" as Bcrypt
-'----------------------- User Registration -----------------------
-User -> Server: POST /auth/register {username, password}
-Server -> AuthRoutes: Route to register
-AuthRoutes -> AuthController: register(req, res)
-AuthController -> Bcrypt: hash(password, salt)
-activate Bcrypt
-Bcrypt --> AuthController: hashedPassword
-deactivate Bcrypt
-AuthController -> UserModel: new User({username, hashedPassword})
-activate UserModel
-UserModel -> DB: save()
-activate DB
-DB --> UserModel: success/failure
-deactivate DB
-UserModel --> AuthController: user
-deactivate UserModel
-AuthController --> AuthRoutes: res.status(201).send("User created") / res.status(500).send(err.message)
-AuthRoutes --> Server: Response
-Server --> User: HTTP Response (201 or 500)
+participant V2EnrollmentController
+participant AuthService
+participant JwtServerProxy
+participant PartnerServiceProxy
+participant ThirdPartyEntityProxy
+participant SubscriberRepository
+participant PersonalDetailsRepository
+participant BillingService
+participant BillingPendingRepository
+participant BillingProducer
+participant EmailService
+participant EmailPendingRepository
+participant RabbitMQProducer
 
-'----------------------- User Login -----------------------
-User -> Server: POST /auth/login {username, password}
-Server -> AuthRoutes: Route to login
-AuthRoutes -> AuthController: login(req, res)
-AuthController -> UserModel: User.findOne({username})
-activate UserModel
-UserModel -> DB: findOne({username})
-activate DB
-DB --> UserModel: user or null
-deactivate DB
-UserModel --> AuthController: user or null
-deactivate UserModel
-alt User found
-AuthController -> Bcrypt: compare(password, user.password)
-activate Bcrypt
-Bcrypt --> AuthController: true/false
-deactivate Bcrypt
-alt Password matches
-AuthController -> JWT: generateToken({userId, username})
-activate JWT
-JWT --> AuthController: accessToken
-deactivate JWT
-AuthController --> AuthRoutes: res.json({accessToken})
-else Password does not match
-AuthController --> AuthRoutes: res.send("Not Allowed")
+autonumber
+
+V2EnrollmentController -> JwtServerProxy: validateToken(token)
+activate JwtServerProxy
+JwtServerProxy --> V2EnrollmentController: ResponseEntity<?> (partnerNumber)
+deactivate JwtServerProxy
+
+alt Token Validation Fails
+    V2EnrollmentController --> V2EnrollmentController: throw UnAuthorizedUserException
+else Token Validation Success & Partner Number Matches
+    V2EnrollmentController -> AuthService: ValidateResponse(subscriber)
+    activate AuthService
+    alt Validation Fails
+        AuthService --> V2EnrollmentController: throw ValidationException
+    else Validation Success
+        V2EnrollmentController -> PartnerServiceProxy: validatePartner(PartnerServiceDto, partnerNumber)
+        activate PartnerServiceProxy
+        PartnerServiceProxy --> V2EnrollmentController: ResponseEntity<SubscriptionData>
+        deactivate PartnerServiceProxy
+        alt Partner Validation Fails
+            V2EnrollmentController --> V2EnrollmentController: throw ValidationException
+        else Partner Validation Success
+            V2EnrollmentController -> ThirdPartyEntityProxy: createCustomer(ThirdPartyEntityDto)
+            activate ThirdPartyEntityProxy
+            ThirdPartyEntityProxy --> V2EnrollmentController: ResponseEntity<Boolean> (success)
+            deactivate ThirdPartyEntityProxy
+            alt Third Party Creation Fails
+                V2EnrollmentController --> V2EnrollmentController: throw ValidationException
+            else Third Party Creation Success
+                V2EnrollmentController -> AuthService: enrollNewSubscriber(subscriber, SUBSCRIBER_NUMBER)
+                activate AuthService
+                AuthService -> PersonalDetailsRepository: save(personalDetails)
+                activate PersonalDetailsRepository
+                PersonalDetailsRepository --> AuthService: PersonalDetails
+                deactivate PersonalDetailsRepository
+                AuthService -> SubscriberRepository: save(subscriber)
+                activate SubscriberRepository
+                SubscriberRepository --> AuthService: Subscriber
+                deactivate SubscriberRepository
+                AuthService --> V2EnrollmentController: Subscriber
+
+                V2EnrollmentController -> BillingService: saveBillingPendingEntry(billingPending)
+                activate BillingService
+                BillingService -> BillingPendingRepository: save(billingPending)
+                activate BillingPendingRepository
+                BillingPendingRepository --> BillingService: BillingPending
+                deactivate BillingPendingRepository
+                BillingService --> V2EnrollmentController: BillingPending
+                deactivate BillingService
+                V2EnrollmentController -> BillingProducer: sendMessage(billingPending)
+                activate BillingProducer
+
+                V2EnrollmentController -> EmailService: addPendingEntry(emailPending)
+                activate EmailService
+                EmailService -> EmailPendingRepository: save(emailPending)
+                activate EmailPendingRepository
+                EmailPendingRepository --> EmailService: EmailPending
+                deactivate EmailPendingRepository
+                EmailService --> V2EnrollmentController: EmailPending
+                deactivate EmailService
+                V2EnrollmentController -> RabbitMQProducer: sendMessage(emailPending)
+                activate RabbitMQProducer
+
+
+                V2EnrollmentController --> V2EnrollmentController: ResponseEntity.ok("success")
+                deactivate RabbitMQProducer
+                deactivate BillingProducer
+                deactivate AuthService
+            end
+        end
+    end
 end
-else User not found
-AuthController --> AuthRoutes: res.status(400).send('Cannot find user')
-end
-AuthRoutes --> Server: Response
-Server --> User: HTTP Response (200 or 400 or 403)
-
-'----------------------- Get All Blogs -----------------------
-User -> Server: GET /blogs
-Server -> BlogRoutes: Route to getAllBlogs
-BlogRoutes -> BlogController: getAllBlogs(req, res)
-BlogController -> BlogModel: Blog.find().populate('author', 'username')
-activate BlogModel
-BlogModel -> DB: find().populate('author', 'username')
-activate DB
-DB --> BlogModel: blogs[]
-deactivate DB
-BlogModel --> BlogController: blogs[]
-deactivate BlogModel
-BlogController --> BlogRoutes: res.json(blogs)
-BlogRoutes --> Server: Response
-Server --> User: HTTP Response (200)
-
-'----------------------- Create Blog -----------------------
-User -> Server: POST /blogs {title, content}, Authorization: Bearer <token>
-Server -> BlogRoutes: Route to createBlog, authenticateToken
-BlogRoutes -> JWT: verifyToken(token)
-activate JWT
-JWT --> BlogRoutes: decoded payload {userId, username}
-deactivate JWT
-BlogRoutes -> BlogController: createBlog(req, res)
-BlogController -> BlogModel: new Blog({title, content, author: userId})
-activate BlogModel
-BlogModel -> DB: save()
-activate DB
-DB --> BlogModel: success/failure
-deactivate DB
-BlogModel --> BlogController: blog
-deactivate BlogModel
-BlogController --> BlogRoutes: res.status(201).send("Blog created") / res.status(500).send(err.message)
-BlogRoutes --> Server: Response
-Server --> User: HTTP Response (201 or 500)
-
-'----------------------- Update Blog -----------------------
-User -> Server: PUT /blogs/:id {title, content}, Authorization: Bearer <token>
-Server -> BlogRoutes: Route to updateBlog, authenticateToken
-BlogRoutes -> JWT: verifyToken(token)
-activate JWT
-JWT --> BlogRoutes: decoded payload {userId, username}
-deactivate JWT
-BlogRoutes -> BlogController: updateBlog(req, res)
-BlogController -> BlogModel: Blog.findById(req.params.id)
-activate BlogModel
-BlogModel -> DB: findById(req.params.id)
-activate DB
-DB --> BlogModel: blog or null
-deactivate DB
-BlogModel --> BlogController: blog or null
-deactivate BlogModel
-
-alt Blog found AND User is author
-BlogController -> BlogModel: blog.save()
-activate BlogModel
-BlogModel -> DB: save()
-activate DB
-DB --> BlogModel: success/failure
-deactivate DB
-BlogModel --> BlogController: blog
-deactivate BlogModel
-BlogController --> BlogRoutes: res.send("Blog updated")
-else Blog not found
-BlogController --> BlogRoutes: res.status(404).send('Blog not found')
-else User is not author
-BlogController --> BlogRoutes: res.sendStatus(403)
-end
-BlogRoutes --> Server: Response
-Server --> User: HTTP Response (200, 404, or 403)
-
-'----------------------- Delete Blog -----------------------
-User -> Server: DELETE /blogs/:id, Authorization: Bearer <token>
-Server -> BlogRoutes: Route to deleteBlog, authenticateToken
-BlogRoutes -> JWT: verifyToken(token)
-activate JWT
-JWT --> BlogRoutes: decoded payload {userId, username}
-deactivate JWT
-BlogRoutes -> BlogController: deleteBlog(req, res)
-BlogController -> BlogModel: Blog.findById(req.params.id)
-activate BlogModel
-BlogModel -> DB: findById(req.params.id)
-activate DB
-DB --> BlogModel: blog or null
-deactivate DB
-BlogModel --> BlogController: blog or null
-deactivate BlogModel
-
-alt Blog found AND User is author
-BlogController -> BlogModel: Blog.findByIdAndDelete(req.params.id)
-activate BlogModel
-BlogModel -> DB: findByIdAndDelete(req.params.id)
-activate DB
-DB --> BlogModel: success/failure
-deactivate DB
-BlogModel --> BlogController:
-deactivate BlogModel
-BlogController --> BlogRoutes: res.send("Blog deleted")
-else Blog not found
-BlogController --> BlogRoutes: res.status(404).send('Blog not found')
-else User is not author
-BlogController --> BlogRoutes: res.sendStatus(403)
-end
-BlogRoutes --> Server: Response
-Server --> User: HTTP Response (200, 404, or 403)
+deactivate V2EnrollmentController
 
 @enduml
 ```
+
+**Explanation of the Diagram:**
+
+1.  **Components:** The diagram represents the core components involved in the enrollment process, including the controller, services, repositories, proxies to external services, and message producers.
+2.  **Flow Initiation:** The `V2EnrollmentController` receives a request to enroll a subscriber.
+3.  **Token Validation:** It first calls the `JwtServerProxy` to validate the provided token.
+4.  **Authorization Check:** After token validation, extract partnerNumber from token and compare with user's partnerNumber.
+5.  **Data Validation:**  If the token is valid and partner Number is matched, the `AuthService` validates the `SubscriberDto`.
+6.  **Partner Validation:** Then, it calls the `PartnerServiceProxy` to validate the partner and subscription details.
+7.  **Third-Party Integration:** Upon successful validation, the `ThirdPartyEntityProxy` is invoked to create a customer in an external system.
+8.  **Data Persistence:** If the third-party creation is successful, the `AuthService` saves the subscriber details in the `SubscriberRepository` and `PersonalDetailsRepository`.
+9.  **Asynchronous Tasks:** `BillingService`, `BillingProducer`, `EmailService`, and `RabbitMQProducer` are engaged in asynchronous operations for billing and email notifications.
+10. **Error Handling:** The `alt` and `else` blocks represent conditional flows based on validation results, third-party creation status, and potential exceptions.
+11. **Return Value:** The controller returns a success message if the enrollment process completes successfully.
+
+**Key Flows:**
+
+*   The diagram illustrates the sequence of operations performed during the enrollment process, including validation, external service calls, data persistence, and asynchronous tasks.
+*   It highlights the dependencies between components and the flow of data between them.
+*   The use of `alt` and `else` blocks clarifies the decision points and error-handling mechanisms in the system.
+*   The asynchronous nature of billing and email notification is indicated by the use of `CompletableFuture.runAsync`.
+

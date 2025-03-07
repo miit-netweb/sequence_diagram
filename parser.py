@@ -112,7 +112,7 @@ def CallApi():
         promptString += "\n"
     try:
         call_bot(promptString)
-        image_path = "D:\AI\sequence_diagram.png"
+        image_path = "D:\AI\sequence_diagram\sequence_diagram.png"
         if not os.path.exists(image_path):
             return jsonify({'error': 'Image not found'}), 404
         return send_file(
