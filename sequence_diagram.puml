@@ -1,6 +1,16 @@
 ```plantuml
 @startuml
-'Participants
+' Style settings
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipantBorderColor black
+skinparam sequenceLifeLineBorderColor #444
+skinparam sequenceParticipantBackgroundColor #e0e0e0
+
+' Title and description
+title Enrollment Service Workflow
+
+' Actors and participants
+actor User
 participant V2EnrollmentController
 participant AuthService
 participant JwtServerProxy
@@ -15,74 +25,76 @@ participant EmailService
 participant EmailPendingRepository
 participant RabbitMQProducer
 
-'Sequence Flow
-V2EnrollmentController -> JwtServerProxy: validateToken(token)
+' Sequence of actions
+User -> V2EnrollmentController: POST /v2/enroll/subscriber (SubscriberDto, Authorization)
+V2EnrollmentController -> JwtServerProxy: validateToken (Authorization)
 activate JwtServerProxy
-JwtServerProxy --> V2EnrollmentController: ResponseEntity<?> (partnerNumber)
+JwtServerProxy -->> V2EnrollmentController: ResponseEntity<?> (Partner Number)
 deactivate JwtServerProxy
-
-alt Valid Token & Partner Number
-    V2EnrollmentController -> AuthService: ValidateResponse(subscriber)
+alt Token Validation Successful and Partner Number Match
+    V2EnrollmentController -> AuthService: ValidateResponse(SubscriberDto)
     activate AuthService
     alt Validation Success
-        V2EnrollmentController -> PartnerServiceProxy: validatePartner(partnerServiceDto, partnerNumber)
+        V2EnrollmentController -> PartnerServiceProxy: validatePartner(PartnerServiceDto, partnerNumber)
         activate PartnerServiceProxy
-        PartnerServiceProxy --> V2EnrollmentController: ResponseEntity<SubscriptionData> (subscriptionData)
+        PartnerServiceProxy -->> V2EnrollmentController: ResponseEntity<SubscriptionData>
         deactivate PartnerServiceProxy
-        alt Subscription Data Valid
-            V2EnrollmentController -> ThirdPartyEntityProxy: createCustomer(thirdPartyEntityDto)
+        alt Partner Validation Success
+            V2EnrollmentController -> ThirdPartyEntityProxy: createCustomer(ThirdPartyEntityDto)
             activate ThirdPartyEntityProxy
-            ThirdPartyEntityProxy --> V2EnrollmentController: ResponseEntity<Boolean> (success)
+            ThirdPartyEntityProxy -->> V2EnrollmentController: ResponseEntity<Boolean> (success)
             deactivate ThirdPartyEntityProxy
-            alt Third Party Creation Success
-                V2EnrollmentController -> AuthService: enrollNewSubscriber(subscriberDto, subscriberNumber)
+            alt Third Party Entity Creation Success
+                V2EnrollmentController -> AuthService: enrollNewSubscriber(SubscriberDto, subscriberNumber)
                 activate AuthService
-                AuthService -> PersonalDetailsRepository: save(personalDetails)
+                AuthService -> PersonalDetailsRepository: save(PersonalDetails)
                 activate PersonalDetailsRepository
-                PersonalDetailsRepository --> AuthService: PersonalDetails
+                PersonalDetailsRepository -->> AuthService: PersonalDetails
                 deactivate PersonalDetailsRepository
-                AuthService -> SubscriberRepository: save(subscriber)
+                AuthService -> SubscriberRepository: save(Subscriber)
                 activate SubscriberRepository
-                SubscriberRepository --> AuthService: Subscriber
+                SubscriberRepository -->> AuthService: Subscriber
                 deactivate SubscriberRepository
+                AuthService -->> V2EnrollmentController: Subscriber
                 deactivate AuthService
-
-                V2EnrollmentController -> BillingService: saveBillingPendingEntry(billingPending)
+                V2EnrollmentController -> BillingService: saveBillingPendingEntry(BillingPending)
                 activate BillingService
-                BillingService -> BillingPendingRepository: save(billingPending)
+                BillingService -> BillingPendingRepository: save(BillingPending)
                 activate BillingPendingRepository
-                BillingPendingRepository --> BillingService: BillingPending
+                BillingPendingRepository -->> BillingService: BillingPending
                 deactivate BillingPendingRepository
+                BillingService -->> V2EnrollmentController: BillingPending
                 deactivate BillingService
-                V2EnrollmentController -> BillingProducer: sendMessage(billingPending)
+                V2EnrollmentController -> BillingProducer: sendMessage(BillingPending)
                 activate BillingProducer
-                BillingProducer --> V2EnrollmentController: void
+                BillingProducer -> Kafka: Produce BillingPending Message
                 deactivate BillingProducer
-
-                V2EnrollmentController -> EmailService: addPendingEntry(emailPending)
+                V2EnrollmentController -> EmailService: addPendingEntry(EmailPending)
                 activate EmailService
-                EmailService -> EmailPendingRepository: save(emailPending)
+                EmailService -> EmailPendingRepository: save(EmailPending)
                 activate EmailPendingRepository
-                EmailPendingRepository --> EmailService: EmailPending
+                EmailPendingRepository -->> EmailService: EmailPending
                 deactivate EmailPendingRepository
+                EmailService -->> V2EnrollmentController: EmailPending
                 deactivate EmailService
-                V2EnrollmentController -> RabbitMQProducer: sendMessage(emailPending)
+                V2EnrollmentController -> RabbitMQProducer: sendMessage(EmailPending)
                 activate RabbitMQProducer
-                RabbitMQProducer --> V2EnrollmentController: void
+                RabbitMQProducer -> RabbitMQ: Send EmailPending Message
                 deactivate RabbitMQProducer
-
-                V2EnrollmentController --> V2EnrollmentController: ResponseEntity.ok("success")
-            else Third Party Creation Failure
-                V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (ErrorCodes.SUBSCRIBER_CREATION_FAILED)
+                V2EnrollmentController --> User: ResponseEntity.ok("success")
+            else Third Party Entity Creation Failure
+                V2EnrollmentController --> User: ResponseEntity (Error: Subscriber Creation Failed)
             end
-        else Subscription Data Invalid
-             V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (ErrorCodes.INVALID_PARTNER)
+        else Partner Validation Failure
+            V2EnrollmentController --> User: ResponseEntity (Error: Invalid Partner)
         end
     else Validation Failure
-        V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (ErrorCodes.USER_VALIDATION_FAILED)
+        AuthService -->> V2EnrollmentController: ValidationException
+        deactivate AuthService
+        V2EnrollmentController --> User: ResponseEntity (Error: User Validation Failed)
     end
-else Invalid Token or Partner Number Mismatch
-    V2EnrollmentController --> V2EnrollmentController: ResponseEntity<ExceptionResponse> (UnAuthorizedUserException)
+else Token Validation Failed or Partner Number Mismatch
+    V2EnrollmentController --> User: ResponseEntity (Error: Unauthorized User)
 end
 
 @enduml
@@ -90,30 +102,49 @@ end
 
 **Explanation of the Diagram:**
 
-1.  **Components:** The diagram includes the key components of the Enrollment Service, such as the Controller (`V2EnrollmentController`), Services (`AuthService`, `BillingService`, `EmailService`), Repositories (`SubscriberRepository`, `PersonalDetailsRepository`, `BillingPendingRepository`, `EmailPendingRepository`), Kafka Producer (`BillingProducer`), RabbitMQ Producer (`RabbitMQProducer`), and Proxies for external services (`JwtServerProxy`, `PartnerServiceProxy`, `ThirdPartyEntityProxy`).
+1.  **Actors and Participants:**
+    *   `User`: Represents the external user initiating the enrollment process.
+    *   `V2EnrollmentController`: The entry point REST controller (`/v2/enroll/subscriber`). It receives the `SubscriberDto` and the `Authorization` token.
+    *   `JwtServerProxy`: A Feign client proxy for calling the TOKEN-SERVICE to validate the JWT token.
+    *   `AuthService`: Service class responsible for validating the subscriber data and enrolling the new subscriber.
+    *   `PartnerServiceProxy`: Feign client proxy for calling the PARTNER-SERVICE to validate partner-related information.
+    *   `ThirdPartyEntityProxy`: Feign client proxy to an external system (THIRDPARTY-ENTITY) that handles customer creation.
+    *   `PersonalDetailsRepository`, `SubscriberRepository`, `BillingPendingRepository`, `EmailPendingRepository`: JPA repositories for database interactions.
+    *   `BillingService`: Service to save Billing Related Data to database.
+    *   `EmailService`: Service to save Email Related Data to database.
+    *   `BillingProducer`: A Kafka producer for sending billing-related messages.
+    *   `RabbitMQProducer`:  A RabbitMQ producer for sending email-related messages.
+    *   `Kafka`: Represents Kafka message broker for billing.
+    *   `RabbitMQ`: Represents RabbitMQ message broker for Email.
 
 2.  **Workflow:**
-    *   The `V2EnrollmentController` receives a new subscriber request (`addNewUser`).
-    *   It first validates the JWT token via `JwtServerProxy.validateToken()`.
-    *   If the token is valid and the partner number in the token matches the partner number in the request, it validates the subscriber data through the `AuthService.ValidateResponse()` method.
-    *   Upon successful validation, it communicates with `PartnerServiceProxy.validatePartner()` to validate partner details.
-    *   If partner validation is successful, it calls `ThirdPartyEntityProxy.createCustomer()` to create the customer in an external entity.
-    *   After successful third-party customer creation, the core enrollment logic in `AuthService.enrollNewSubscriber()` is executed, which saves the `PersonalDetails` and `Subscriber` entities to their respective repositories (`PersonalDetailsRepository`, `SubscriberRepository`).
-    *   Billing and Email services is called `BillingService.saveBillingPendingEntry()` and `RabbitMQProducer.sendMessage()` for message publishing respectively.
-    *   Finally, the controller returns a success or failure response.
+    *   The `User` sends a POST request to the `/v2/enroll/subscriber` endpoint on the `V2EnrollmentController`, including the `SubscriberDto` and an `Authorization` token.
+    *   The `V2EnrollmentController` calls the `JwtServerProxy` to validate the token.
+        *If token is invalid a error message is thrown*
+    *   Upon successful token validation and partner number verification, the `V2EnrollmentController` calls the `AuthService` to validate the `SubscriberDto`.
+        *   If validation fails, a `ValidationException` is thrown, and an error response is sent back to the `User`.
+    *   If the subscriber data is valid, the `V2EnrollmentController` calls the `PartnerServiceProxy` to validate the partner information.
+        *   If partner validation fails, a `ValidationException` is thrown, and an error response is sent back to the `User`.
+    *   Then `ThirdPartyEntityProxy` is called to create a new Customer in external system.
+         *   If creation fails, a `ValidationException` is thrown, and an error response is sent back to the `User`.
+    *   `AuthService` then saves personal details using `PersonalDetailsRepository`, `Subscriber` information using `SubscriberRepository`.
+    *   `BillingService` then saves billing pending entries using `BillingPendingRepository`, sends a message via `BillingProducer` to Kafka, and `EmailService` saves email pending information using `EmailPendingRepository` and publishes a message using `RabbitMQProducer` to RabbitMQ for sending the email.
+    *   If all operations are successful, a success response (`ResponseEntity.ok("success")`) is returned to the `User`.
 
-3.  **Data Flow:**
-    *   The `SubscriberDto` contains subscriber data, which is passed between the controller and the `AuthService`.
-    *   `PartnerServiceDto` and `SubscriptionData` is passed to the `PartnerServiceProxy`.
-    *   The subscriber number is generated within the `AuthService`.
-    *   `ThirdPartyEntityDto` is passed to `ThirdPartyEntityProxy`.
-    *   `BillingPending` and `EmailPending` is passed to the respective services and queues.
-    *   `PersonalDetails` and `Subscriber` entities are saved to the database.
+3.  **Dependencies & Interactions:**
+    *   The `V2EnrollmentController` depends on `AuthService`, `JwtServerProxy`, `PartnerServiceProxy`, `ThirdPartyEntityProxy`, `BillingService`, `EmailService`, `BillingProducer`, and `RabbitMQProducer`.
+    *   The `AuthService` depends on `PersonalDetailsRepository`, `SubscriberRepository`.
+    *   The `BillingService` depends on `BillingPendingRepository`
+    *   The `EmailService` depends on `EmailPendingRepository`
 
-4.  **Dependencies:** The diagram clearly shows the dependencies between the components, particularly the use of Proxies to interact with external services.
+**Key Considerations:**
 
-5.  **Error Handling:** Alternative flows are included to represent potential error scenarios, such as failed validations, invalid partner details, and failures during third-party customer creation.
+*   **Error Handling:** The diagram includes alternative flows (`alt/else`) to represent different validation failures and error scenarios.
+*   **Microservice Communication:** The diagram highlights inter-service communication using Feign clients (`JwtServerProxy`, `PartnerServiceProxy`, `ThirdPartyEntityProxy`).
+*   **Asynchronous Operations:** Billing and Email messaging flows are marked as asynchronous using `CompletableFuture.runAsync`, indicating that these tasks are executed in separate threads.
+*   **Message Queues:** The diagram shows the interaction with Kafka (for billing) and RabbitMQ (for email) message brokers.
+*   **Database Operations:** The diagram includes the JPA repositories (`PersonalDetailsRepository`, `SubscriberRepository`, `BillingPendingRepository`, `EmailPendingRepository`) used for database interactions.
+*   **Rate Limiting:**  The `@RateLimiter` annotation on the `addNewUser` method indicates rate limiting, although the rate limiting component itself isn't explicitly shown in the sequence.
+*   **Authorization:** The authorization token is passed to JWT service for authentication.
 
-6.  **Asynchronous Operations:** The asynchronous operations are saving billing details and sending an email.
-
-7.  **Rate Limiting:** Controller is protected by `RateLimiter`.
+This PlantUML diagram provides a clear visual representation of the `EnrollmentService`'s architecture, component interactions, and data flow.  It can serve as a valuable tool for understanding the system's design and identifying potential areas for improvement.
